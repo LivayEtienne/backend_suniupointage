@@ -16,8 +16,8 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->string('adresse');
             $table->string('telephone');
-            $table->string('matricule')->unique();
-            $table->string('cardId')->unique();
+            $table->string('matricule')->unique()->nullable(); // Auto-généré
+            $table->string('cardId')->unique()->nullable(); // NULL par défaut
             $table->string('role'); // apprenant, employé, vigile, admin
             $table->string('statut')->default('actif'); // actif, bloqué
             $table->timestamps();

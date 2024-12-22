@@ -10,6 +10,14 @@ use App\Http\Controllers\Api\CohorteController;
 use App\Http\Controllers\Api\ApprenantController;
 
 use App\Http\Controllers\Api\HistoriqueController;
+use App\Http\Controllers\Api\AuthController;
+
+Route::post('login', [AuthController::class, 'login']);
+Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+Route::middleware('auth:sanctum')->get('/user', [AuthController::class, 'getAuthenticatedUser']); // Route pour obtenir l'utilisateur authentifié
+
+// Route pour l'authentification avec cardId
+Route::post('/login/cardid', [AuthController::class, 'loginWithCardId']);
 
 Route::get('/historiques', [HistoriqueController::class, 'index']); // Afficher tous les historiques
 Route::post('/historiques', [HistoriqueController::class, 'store']); // Créer un nouvel historique
