@@ -12,6 +12,9 @@ use App\Http\Controllers\Api\ApprenantController;
 use App\Http\Controllers\Api\HistoriqueController;
 use App\Http\Controllers\Api\AuthController;
 
+
+Route::post('/import', [ApprenantController::class, 'importApprenants']); // Importer des apprenants
+
 Route::post('login', [AuthController::class, 'login']);
 Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 Route::middleware('auth:sanctum')->get('/user', [AuthController::class, 'getAuthenticatedUser']); // Route pour obtenir l'utilisateur authentifié

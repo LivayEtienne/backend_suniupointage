@@ -1,7 +1,9 @@
 <?php
 
 namespace App\Http\Controllers\Api;
-
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Hash;
 use App\Http\Controllers\Controller;
 use App\Models\Apprenant;
 use Illuminate\Http\Request;
@@ -76,5 +78,80 @@ class ApprenantController extends Controller
         $apprenant->delete();
 
         return response()->json(['message' => 'Apprenant supprimé avec succès.'], 200);
+    }
+
+    public function importApprenants(Request $request)
+    {
+        // Validation du fichier CSV
+        $validator = Validator::make($request->all(), [
+            'file' => 'required|file|mimes:csv,txt|max:2048',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $file = $request->file('file');
+
+        try {
+            // Lire et traiter le fichier CSV
+            $csvData = array_map('str_getcsv', file($file->getRealPath()));
+            $headers = array_shift($csvData);
+
+            // Vérification des en-têtes
+            $expectedHeaders = ['nom', 'prenom', 'email', 'password', 'adresse', 'telephone', 'id_cohorte'];
+            if ($headers !== $expectedHeaders) {
+                return response()->json(['error' => 'Le fichier CSV ne contient pas les colonnes attendues.'], 400);
+            }
+
+            DB::beginTransaction();
+            foreach ($csvData as $row) {
+                $data = array_combine($headers, $row);
+
+                // Validation des données individuelles
+                $validator = Validator::make($data, [
+                    'nom' => 'required|string|max:255',
+                    'prenom' => 'required|string|max:255',
+                    'email' => 'required|email|unique:users,email',
+                    'password' => 'required|string|min:6',
+                    'adresse' => 'nullable|string|max:255',
+                    'telephone' => 'nullable|string|max:20',
+                    'id_cohorte' => 'required|exists:cohortes,id',
+                ]);
+
+                if ($validator->fails()) {
+                    throw new \Exception('Validation échouée pour une ligne: ' . implode(', ', $validator->errors()->all()));
+                }
+
+                // Créer l'utilisateur
+                $userId = DB::table('users')->insertGetId([
+                    'nom' => $data['nom'],
+                    'prenom' => $data['prenom'],
+                    'email' => $data['email'],
+                    'password' => Hash::make($data['password']),
+                    'adresse' => $data['adresse'] ?? null,
+                    'telephone' => $data['telephone'] ?? null,
+                    'role' => 'Apprenant',
+                    'statut' => 'actif',
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                // Créer l'entrée dans la table apprenants
+                DB::table('apprenants')->insert([
+                    'user_id' => $userId,
+                    'id_cohorte' => $data['id_cohorte'],
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json(['message' => 'Les apprenants ont été importés avec succès.'], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 }
