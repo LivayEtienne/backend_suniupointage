@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
+use Illuminate\Support\Facades\Http; // Pour envoyer des requêtes HTTP
 use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
@@ -22,29 +23,55 @@ class UserController extends Controller
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
-{
-    // Valider les données entrantes
-    $validated = $request->validate([
-        'nom' => 'required|string|max:255',
-        'prenom' => 'required|string|max:255',
-        'photo' => 'nullable|string', // Facultatif
-        'email' => 'required|email|unique:users',
-        'adresse' => 'required|string',
-        'telephone' => 'required|string',
-        'cardId' => 'nullable|string|unique:users', // Facultatif
-        'role' => 'required|string',
-        'statut' => 'nullable|string', // Facultatif
-        'password' => 'required|string|min:8',
-    ]);
+    {
+        // Validation des données entrantes
+        $validated = $request->validate([
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'photo' => 'nullable|string', // Facultatif
+            'email' => 'required|email|unique:users',
+            'adresse' => 'required|string',
+            'telephone' => 'required|string',
+            'cardId' => 'nullable|string|unique:users', // Facultatif
+            'role' => 'required|string',
+            'statut' => 'nullable|string', // Facultatif
+            'password' => 'required|string|min:8',
+        ]);
 
-    // Hacher le mot de passe
-    $validated['password'] = Hash::make($validated['password']);
+        // Hacher le mot de passe
+        $validated['password'] = Hash::make($validated['password']);
 
-    // Créer un nouvel utilisateur (le matricule sera généré automatiquement)
-    $user = User::create($validated);
+        // Créer un nouvel utilisateur dans la base de données Laravel
+        $user = User::create($validated);
 
-    return response()->json(['message' => 'Utilisateur créé avec succès.', 'user' => $user], 201);
-}
+
+        try {
+            // Envoyer une requête POST à l'API Node.js
+            $response = Http::post('http://localhost:4000/api/users', [
+                'userId' => $user->id,
+                'nom' => $user->nom,
+                'prenom' => $user->prenom,
+                'email' => $user->email,
+                'role' => $user->role,
+                'matricule' => $user->matricule, // Assurez-vous que ce champ existe
+            ]);
+
+            if ($response->failed()) {
+                return response()->json([
+                    'message' => 'Utilisateur créé, mais échec de la synchronisation avec Node.js.',
+                    'user' => $user,
+                ], 201);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Utilisateur créé, mais une erreur est survenue lors de la synchronisation avec Node.js.',
+                'error' => $e->getMessage(),
+                'user' => $user,
+            ], 201);
+        }
+
+        return response()->json(['message' => 'Utilisateur créé avec succès et synchronisé avec Node.js.', 'user' => $user], 201);
+    }
 
     /**
      * Display the specified resource.
@@ -59,33 +86,65 @@ class UserController extends Controller
      * Update the specified resource in storage.
      */
     public function update(Request $request, string $id)
-{
-    $user = User::findOrFail($id);
-
-    // Valider les données mises à jour
-    $validated = $request->validate([
-        'nom' => 'sometimes|string|max:255',
-        'prenom' => 'sometimes|string|max:255',
-        'photo' => 'nullable|string',
-        'email' => 'sometimes|email|unique:users,email,' . $id,
-        'adresse' => 'sometimes|string',
-        'telephone' => 'sometimes|string',
-        'cardId' => 'nullable|string|unique:users,cardId,' . $id,
-        'role' => 'sometimes|string',
-        'statut' => 'nullable|string',
-        'password' => 'sometimes|string|min:8',
-    ]);
-
-    // Hacher le mot de passe si fourni
-    if (!empty($validated['password'])) {
-        $validated['password'] = Hash::make($validated['password']);
+    {
+        // Rechercher l'utilisateur par ID
+        $user = User::findOrFail($id);
+    
+        // Valider les données mises à jour
+        $validated = $request->validate([
+            'nom' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email,' . $id,
+            'role' => 'required|string',
+            'prenom' => 'sometimes|string|max:255',
+            'photo' => 'nullable|string',
+            'adresse' => 'sometimes|string',
+            'telephone' => 'sometimes|string',
+            'cardId' => 'nullable|string|unique:users,cardId,' . $id,
+            'statut' => 'nullable|string',
+            'password' => 'sometimes|string|min:8',
+        ]);
+    
+        // Hacher le mot de passe si fourni
+        if (!empty($validated['password'])) {
+            $validated['password'] = Hash::make($validated['password']);
+        }
+    
+        // Mettre à jour l'utilisateur dans MySQL
+        $user->update($validated);
+    
+        // Préparer les données pour l'API Node.js
+        $nodePayload = [
+            'nom' => $user->nom,
+            'email' => $user->email,
+            'role' => $user->role,
+            'matricule' => $user->matricule,
+            'status' => $user->statut,
+        ];
+    
+        // Communiquer avec l'API Node.js pour mettre à jour dans MongoDB
+        try {
+            $response = Http::put("http://localhost:4000/api/users/{$user->matricule}", $nodePayload);
+    
+            if ($response->failed()) {
+                return response()->json([
+                    'message' => 'Mise à jour dans MongoDB échouée',
+                    'error' => $response->body(),
+                ], 500);
+            }
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Erreur de communication avec le microservice Node.js',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    
+        // Retourner la réponse de succès
+        return response()->json([
+            'message' => 'Utilisateur mis à jour avec succès dans MySQL et MongoDB.',
+            'user' => $user,
+        ]);
     }
-
-    $user->update($validated);
-
-    return response()->json(['message' => 'Utilisateur mis à jour avec succès.', 'user' => $user]);
-}
-
+    
 
     /**
      * Remove the specified resource from storage.
