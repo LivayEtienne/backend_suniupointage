@@ -12,11 +12,11 @@ class Department extends Model
     // Colonnes autorisées pour l'insertion et la mise à jour
     protected $fillable = ['nom', 'code', 'date_de_creation'];
 
-    /**
-     * Un département peut avoir plusieurs employés.
+       /**
+     * Un département a plusieurs employés.
      */
     public function employees()
     {
-        return $this->hasMany(Employee::class);
+        return $this->hasMany(Employee::class, 'id_departement');
     }
 }

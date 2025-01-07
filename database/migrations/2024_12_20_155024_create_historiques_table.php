@@ -11,9 +11,9 @@ return new class extends Migration
         Schema::create('historiques', function (Blueprint $table) {
             $table->id(); // Identifiant unique
             $table->foreignId('user_id')->constrained('users'); // Clé étrangère vers users ou apprenants
-            $table->timestamp('date'); // Date et heure de l'événement
-            $table->string('action'); // Type d'action (par exemple : "pointage")
-            $table->text('description'); // Description de l'événement
+            $table->timestamp('heure_entree'); // Heure d'entrée (pointage)
+            $table->timestamp('heure_sortie')->nullable(); // Heure de sortie (nullable si l'utilisateur n'est pas encore sorti)
+            $table->string('activite')->default('Activité'); // Nouvelle colonne pour l'activité avec une valeur par défaut
             $table->timestamps(); // Created_at, updated_at
         });
     }

@@ -9,7 +9,6 @@ class Employee extends Model
 {
     use HasFactory;
 
-    // Colonnes autorisées pour l'insertion et la mise à jour
     protected $fillable = ['user_id', 'fonction', 'id_departement'];
 
     /**

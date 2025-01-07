@@ -9,7 +9,7 @@ class Historique extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'date', 'action', 'description'];
+    protected $fillable = ['user_id', 'heure_entree', 'heure_sortie', 'activite'];
 
     /**
      * L'historique appartient à un utilisateur.

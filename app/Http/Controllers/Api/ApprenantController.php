@@ -24,20 +24,44 @@ class ApprenantController extends Controller
      */
     public function store(Request $request)
     {
-        // Valider les données entrantes
+        // Validation des données entrantes
         $validated = $request->validate([
-            'user_id' => 'required|exists:users,id',  // Vérifie que l'user_id existe dans la table users
-            'id_cohorte' => 'required|exists:cohortes,id',  // Vérifie que l'id_cohorte existe dans la table cohortes
+            'nom' => 'required|string|max:255',
+            'prenom' => 'required|string|max:255',
+            'fonction' => '|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'adresse' => 'nullable|string|max:255',
+            'telephone' => 'nullable|string|max:20',
+            'id_cohorte' => 'required|exists:cohortes,id',
         ]);
-
-        // Créer un apprenant
-        $apprenant = Apprenant::create([
-            'user_id' => $validated['user_id'],
-            'id_cohorte' => $validated['id_cohorte']
-        ]);
-
-        return response()->json(['message' => 'Apprenant créé avec succès.', 'apprenant' => $apprenant], 201);
+    
+        try {
+            // Créer un utilisateur avec les informations fournies
+            $user = DB::table('users')->insertGetId([
+                'nom' => $validated['nom'],
+                'prenom' => $validated['prenom'],
+                'email' => $validated['email'],
+                'password' => Hash::make('password123'), // Vous pouvez définir un mot de passe par défaut ou en demander un
+                'adresse' => $validated['adresse'] ?? null,
+                'telephone' => $validated['telephone'] ?? null,
+                'role' => 'Apprenant', // Définir le rôle de l'utilisateur
+                'statut' => 'actif', // Statut actif par défaut
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+    
+            // Créer un apprenant associé à cet utilisateur
+            $apprenant = Apprenant::create([
+                'user_id' => $user,
+                'id_cohorte' => $validated['id_cohorte']
+            ]);
+    
+            return response()->json(['message' => 'Apprenant créé avec succès.', 'apprenant' => $apprenant], 201);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Une erreur est survenue lors de la création de l\'apprenant : ' . $e->getMessage()], 500);
+        }
     }
+    
 
     /**
      * Afficher les détails d'un apprenant.
@@ -113,7 +137,7 @@ class ApprenantController extends Controller
                     'nom' => 'required|string|max:255',
                     'prenom' => 'required|string|max:255',
                     'email' => 'required|email|unique:users,email',
-                    'password' => 'required|string|min:6',
+                    'password' => 'nullable|string|min:6',
                     'adresse' => 'nullable|string|max:255',
                     'telephone' => 'nullable|string|max:20',
                     'id_cohorte' => 'required|exists:cohortes,id',
