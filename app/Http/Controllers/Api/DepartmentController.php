@@ -17,6 +17,15 @@ class DepartmentController extends Controller
         return Department::with('employees')->get();
     }
 
+    // Dans DepartmentController.php
+public function getDepartmentCount()
+{
+    $departmentCount = \App\Models\Department::count();  // Compte le nombre de départements dans la table `departments`
+    
+    return response()->json(['departmentCount' => $departmentCount]);
+}
+
+
     /**
      * Créer un nouveau département.
      */
@@ -26,7 +35,7 @@ class DepartmentController extends Controller
         $validated = $request->validate([
             'nom' => 'required|string|max:255',
             'code' => 'required|string|unique:departments',
-            'date_de_creation' => 'required|date',
+            'date_de_creation' => '|date',
         ]);
 
         // Créer un nouveau département
@@ -35,6 +44,11 @@ class DepartmentController extends Controller
         return response()->json(['message' => 'Département créé avec succès.', 'department' => $department], 201);
     }
 
+    public function checkNameExists($nom)
+    {
+        $exists = Department::where('nom', $nom)->exists();
+        return response()->json($exists);
+    }
     /**
      * Afficher un département spécifique.
      */

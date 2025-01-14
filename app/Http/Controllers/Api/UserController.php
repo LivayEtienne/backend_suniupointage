@@ -11,6 +11,7 @@ use App\Models\Department;
 use App\Models\Cohorte;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;   // Pour utiliser les transactions de base de données
+use GuzzleHttp\Client;
 
 class UserController extends Controller
 {
@@ -27,49 +28,102 @@ class UserController extends Controller
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
-    {
-        // Validation des données entrantes
-        $validated = $request->validate([
-            'nom' => 'required|string|max:255',
-            'prenom' => 'required|string|max:255',
-            'photo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048', // Photo devient facultative
-            'email' => 'required|email|unique:users',
-            'adresse' => 'required|string',
-            'telephone' => 'required|string',
-            'cardId' => 'nullable|string|unique:users', 
-            'role' => 'required|string',
-            'statut' => 'nullable|string',
-            'password' => 'nullable|string|min:8',
+{
+    // Validation des données entrantes
+    $validated = $request->validate([
+        'nom' => 'required|string|max:255',
+        'prenom' => 'required|string|max:255',
+        'photo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048', // Photo devient facultative
+        'email' => 'required|email|unique:users',
+        'adresse' => 'required|string',
+        'telephone' => 'required|string',
+        'cardId' => 'nullable|string|unique:users', 
+        'role' => 'required|string',
+        'statut' => 'nullable|string',
+        'password' => 'nullable|string|min:8',
+    ]);
+
+    // Hacher le mot de passe
+    if (!empty($validated['password'])) {
+        $validated['password'] = Hash::make($validated['password']);
+    } else {
+        unset($validated['password']); // Supprime la clé si elle est vide
+    }
+
+    // Si une photo est envoyée, on la stocke
+    if ($request->hasFile('photo')) {
+        $photoPath = $request->file('photo')->store('photos', 'public');
+        $validated['photo'] = $photoPath;
+    }
+
+    // Générer automatiquement le matricule
+    $lastUser = User::latest()->first();
+    $newMatricule = 'USR-' . str_pad($lastUser ? $lastUser->id + 1 : 1, 6, '0', STR_PAD_LEFT);
+    $validated['matricule'] = $newMatricule;
+
+    // Créer un nouvel utilisateur
+    $user = User::create($validated);
+
+    // Envoyer les données au serveur Node.js pour synchroniser l'utilisateur avec MongoDB
+    $client = new Client();  // Utilisation de Guzzle
+    try {
+        $response = $client->post('http://localhost:4001/api/sync-user', [
+            'json' => [
+                'nom' => $user->nom,
+                'prenom' => $user->prenom,
+                'email' => $user->email,
+                'photo' => $user->photo, // Si vous stockez une photo, vous pouvez l'envoyer aussi
+                'adresse' => $user->adresse,
+                'telephone' => $user->telephone,
+                'cardId' => $user->cardId,
+                'role' => $user->role,
+                'statut' => $user->statut,
+                'matricule' => $user->matricule,
+            ]
         ]);
-    
-        // Hacher le mot de passe
-        if (!empty($validated['password'])) {
-            $validated['password'] = Hash::make($validated['password']);
-        } else {
-            unset($validated['password']); // Supprime la clé si elle est vide
-        }
-    
-        // Si une photo est envoyée, on la stocke
-        if ($request->hasFile('photo')) {
-            $photoPath = $request->file('photo')->store('photos', 'public');
-            $validated['photo'] = $photoPath;
-        }
-    
-        // Générer automatiquement le matricule
-        $lastUser = User::latest()->first();
-        $newMatricule = 'USR-' . str_pad($lastUser ? $lastUser->id + 1 : 1, 6, '0', STR_PAD_LEFT);
-        $validated['matricule'] = $newMatricule;
-    
-        // Créer un nouvel utilisateur
-        $user = User::create($validated);
-    
-    
-        // Retourner la réponse avec statut 201
+
+        // Si la réponse de Node.js est positive
+        $data = json_decode($response->getBody()->getContents(), true);
+        \Log::info('Réponse de Node.js :', $data);
+
+    } catch (\Exception $e) {
+        // Gérer les erreurs si la communication avec Node.js échoue
+        \Log::error('Erreur de communication avec Node.js : ' . $e->getMessage());
         return response()->json([
-            'message' => 'Utilisateur créé avec succès et synchronisé avec Node.js.',
+            'message' => 'Utilisateur créé avec succès, mais erreur de synchronisation avec Node.js.',
             'user' => $user,
         ], 201);
     }
+
+    // Retourner la réponse avec statut 201
+    return response()->json([
+        'message' => 'Utilisateur créé avec succès et synchronisé avec Node.js.',
+        'user' => $user,
+    ], 201);
+}
+
+    public function archiver($id)
+    {
+        // Trouver l'utilisateur par son ID
+        $user = User::find($id);
+    
+        // Vérifier si l'utilisateur existe
+        if (!$user) {
+            return response()->json(['message' => 'Utilisateur non trouvé'], 404);
+        }
+    
+        // Mettre à jour le statut de l'utilisateur pour le marquer comme "inactif"
+        $user->statut = 'inactif';
+        $user->save();
+    
+        // Retourner une réponse avec le statut mis à jour
+        return response()->json([
+            'message' => 'Utilisateur archivé avec succès.',
+            'user' => $user
+        ]);
+    }
+    
+
     
 
     /**
@@ -160,11 +214,11 @@ public function updateUid(Request $request, $id)
 
     // Valider les données du cardId
     $validated = $request->validate([
-        'cardId' => 'required|string|unique:users,cardId,' . $id,
+        'uid' => 'nullable|string|unique:users,cardId,' . $id,
     ]);
 
     // Mettre à jour l'UID (cardId)
-    $user->cardId = $validated['cardId'];
+    $user->cardId = $validated['uid'];
     $user->save(); // Enregistrer les modifications
 
     // Retourner une réponse JSON avec le message de succès
@@ -295,4 +349,21 @@ private function generateNewMatricule()
 
     return 'USR-' . str_pad($nextNumber, 6, '0', STR_PAD_LEFT);
 }
+
+public function bulkDelete(Request $request)
+    {
+        $ids = $request->input('ids'); // Tableau d'IDs des utilisateurs à supprimer
+
+        if (empty($ids)) {
+            return response()->json(['error' => 'No IDs provided'], 400);
+        }
+
+        // Supprimer d'abord les apprenants associés
+        DB::table('apprenants')->whereIn('user_id', $ids)->delete();
+
+        // Puis supprimer les utilisateurs
+        User::whereIn('id', $ids)->delete();
+
+        return response()->json(['message' => 'Users and associated records deleted successfully']);
+    }
 }

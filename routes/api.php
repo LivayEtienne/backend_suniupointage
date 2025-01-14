@@ -16,6 +16,9 @@ use App\Http\Controllers\Api\AuthController;
 Route::post('/import', [ApprenantController::class, 'importApprenants']); // Importer des apprenants
 // routes/api.php
 Route::post('user/{id}/upload-photo', [UserController::class, 'uploadPhoto']);
+Route::post('/users/bulk-delete', [UserController::class, 'bulkDelete']);
+
+Route::put('/users/{id}/archive', [UserController::class, 'archiver']);
 
 Route::post('login', [AuthController::class, 'login']);
 Route::post('logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
@@ -26,6 +29,9 @@ Route::post('/login/cardid', [AuthController::class, 'loginWithCardId']);
 
 //Route::get('/historiques', [HistoriqueController::class, 'index']); // Afficher tous les historiques
 //Route::post('/historiques', [HistoriqueController::class, 'store']); // Créer un nouvel historique
+
+Route::get('departments/check-name-exists/{nom}', [DepartmentController::class, 'checkNameExists']);
+Route::apiResource('departments', DepartmentController::class);
 
 Route::resource('apprenants', ApprenantController::class);
 
@@ -48,6 +54,9 @@ Route::post('/cohortes', [CohorteController::class, 'store']);
 
 Route::apiResource('users', UserController::class);
 Route::apiResource('employees', EmployeeController::class);
+
+Route::put('users/{id}', [UserController::class, 'update']);
+
 
 
 Route::get('/historiques', [HistoriqueController::class, 'index']);
